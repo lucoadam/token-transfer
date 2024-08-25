@@ -16,10 +16,20 @@ File for the environment variables is `.env`
 - `TOKEN_ADDRESS` - The address of the token contract
 - `EVM_RPC_URL` - The RPC URL of the network
 
-### Usage
-
+### Usage 1
+Transfer one by one without external contract. Suitable if you have less than 25 wallets to transfer.
 ```bash
 yarn install
 
 yarn start
+```
+
+### Usage 2
+Transfer in bulk (500 at a time) with deploying external contract. Comperatively it is faster and cheaper for more than 25 wallets.
+```bash
+yarn install
+
+yarn deploy
+
+yarn start-bulk
 ```

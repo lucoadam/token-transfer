@@ -1,6 +1,14 @@
 const { configDotenv } = require("dotenv");
 const { ethers } = require("ethers");
 const fs = require("fs");
+const {
+  abi: TokenTransferModuleABI,
+} = require("./ignition/deployments/TokenTransfer/artifacts/TokenTranferModule#TokenTransfer.json");
+const {
+  "TokenTranferModule#TokenTransfer": TokenTransferModuleAddress,
+} = require("./ignition/deployments/TokenTransfer/deployed_addresses.json");
+
+const BigNumber = require("bignumber.js");
 
 configDotenv();
 const { TOKEN_ADDRESS, PRIVATE_KEY, EVM_RPC_URL } = process.env;
@@ -10,7 +18,7 @@ const configs = {
   rpc: EVM_RPC_URL,
 };
 
-const wallets = fs
+let wallets = fs
   .readFileSync("wallets.csv", "utf8")
   .split("\n")
   .map((line) => {
@@ -34,6 +42,7 @@ const tokenABI = [
   "function approve(address spender, uint256 amount) public returns (bool)",
   "function allowance(address owner, address spender) public view returns (uint256)",
 ];
+
 // The token you want to send
 const tokenContract = new ethers.Contract(
   configs.tokenAddress,
@@ -41,8 +50,13 @@ const tokenContract = new ethers.Contract(
   wallet
 );
 
-// Recipients and amounts
-const recipients = wallets.map((wallet) => wallet.address);
+// The contract that will batch transfer the tokens
+const batchTransferContract = new ethers.Contract(
+  TokenTransferModuleAddress,
+  TokenTransferModuleABI,
+  wallet
+);
+
 const failed = [];
 const succcess = [];
 
@@ -52,44 +66,77 @@ const sendTokens = async () => {
   console.log("Fetching token decimals");
   const decimal = await tokenContract.decimals();
   console.log("Token Decimals:", decimal);
-  const receivingAmounts = wallets.map((wallet) =>
-    ethers.parseUnits(wallet.amount, Number(decimal))
+
+  wallets = wallets.map((wallet) => ({
+    ...wallet,
+    amount: ethers.parseUnits(wallet.amount, Number(decimal)),
+  }));
+
+  const isAllSameAmount = wallets.every(
+    (wallet) => wallet.amount === wallets[0].amount
   );
-  for (let i = 0; i < recipients.length; i++) {
+  const totalAmounts = wallets.reduce(
+    (acc, wallet) => acc.plus(wallet.amount.toString()),
+    new BigNumber(0)
+  );
+
+  console.log(
+    "Total Amounts:",
+    ethers.formatUnits(totalAmounts.toFixed(), Number(decimal))
+  );
+  console.log("Approving contract to spend tokens");
+  let tx = await tokenContract.approve(
+    TokenTransferModuleAddress,
+    totalAmounts.toFixed()
+  );
+  await tx.wait();
+  console.log("Approved success");
+
+  while (true) {
+    // slice 500 wallets
+    const recipients = wallets.splice(0, 500);
+    if (recipients.length === 0) {
+      break;
+    }
     try {
+      const receivingAmounts = recipients.map((wallet) => wallet.amount);
+      const receivingAddresses = recipients.map((wallet) => wallet.address);
       // gas price in gwei
       gasPrice = await (await provider.getFeeData()).gasPrice;
       console.log("Gas Price:", ethers.formatUnits(gasPrice, "gwei"));
-      const tx = await tokenContract.transfer(
-        recipients[i],
-        receivingAmounts[i],
-        {
-          gasPrice,
-        }
-      );
-      await tx.wait();
-      console.log(
-        "Sent success to:",
-        recipients[i],
-        "at index:",
-        i + 1,
-        "of",
-        recipients.length
-      );
-      succcess.push({
-        address: recipients[i],
-        amount: receivingAmounts[i],
-        hash: tx.hash,
+      if (isAllSameAmount) {
+        tx = await batchTransferContract.transferSingleValue(
+          configs.tokenAddress,
+          receivingAddresses,
+          receivingAmounts[0]
+        );
+        await tx.wait();
+      } else {
+        tx = await batchTransferContract.transferBatchValue(
+          configs.tokenAddress,
+          receivingAddresses,
+          receivingAmounts
+        );
+        await tx.wait();
+      }
+      console.log("Sent success to:", recipients.length, "wallets");
+      recipients.forEach((wallet) => {
+        succcess.push({
+          address: wallet.address,
+          amount: wallet.amount,
+          hash: tx.hash,
+        });
       });
     } catch (error) {
       console.log(error);
       // if failed add to failed list
-      failed.push({
-        address: recipients[i],
-        amount: receivingAmounts[i],
+      recipients.forEach((wallet) => {
+        failed.push({
+          address: wallet.address,
+          amount: wallet.amount,
+        });
       });
     }
-
     // write failed list to file with name failed.csv
     const failedCSV = failed
       .map(

@@ -4,13 +4,36 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "start": "node main.js"
+    "start": "node main.js",
+    "start-bulk": "node bulk.js",
+    "compile": "npx hardhat compile",
+    "deploy": "npx hardhat clean && rimraf ignition/deployments && npx hardhat compile && npx hardhat ignition deploy ignition/modules/TokenTransfer.js --deployment-id TokenTransfer",
+    "clean": "npx hardhat clean && rimraf ignition/deployments"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bignumber.js": "^9.1.2",
     "dotenv": "^16.4.5",
-    "ethers": "5.7"
+    "ethers": "^6.4.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-ignition": "^0.15.0",
+    "@nomicfoundation/hardhat-ignition-ethers": "^0.15.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "chai": "^4.2.0",
+    "hardhat": "^2.14.0",
+    "hardhat-gas-reporter": "^1.0.8",
+    "rimraf": "^6.0.1",
+    "solidity-coverage": "^0.8.0",
+    "typechain": "^8.3.0"
   }
 }
